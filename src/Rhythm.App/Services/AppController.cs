@@ -1,24 +1,35 @@
 using System.Windows;
 using System.Windows.Threading;
+using Rhythm.App.Localization;
+using Rhythm.Core.Abstractions;
 using Rhythm.Core.Events;
 using Rhythm.Core.Models;
 using Rhythm.Core.Services;
+using WpfApplication = System.Windows.Application;
 
 namespace Rhythm.App.Services;
 
 public sealed class AppController : IDisposable
+    , IMainShellCoordinator
 {
     private readonly RhythmEngine _engine;
-    private readonly WindowsSessionMonitor _sessionMonitor;
+    private readonly ISessionMonitor _sessionMonitor;
+    private readonly ITrayService _trayService;
+    private readonly IBreakOverlayPresenter _breakOverlayPresenter;
     private readonly DispatcherTimer _timer;
 
-    private MainWindow? _mainWindow;
-    private RestOverlayWindow? _restOverlayWindow;
+    private IMainShell? _mainShell;
 
-    public AppController(RhythmEngine engine, WindowsSessionMonitor sessionMonitor)
+    public AppController(
+        RhythmEngine engine,
+        ISessionMonitor sessionMonitor,
+        ITrayService trayService,
+        IBreakOverlayPresenter breakOverlayPresenter)
     {
         _engine = engine;
         _sessionMonitor = sessionMonitor;
+        _trayService = trayService;
+        _breakOverlayPresenter = breakOverlayPresenter;
         _timer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(1)
@@ -35,16 +46,38 @@ public sealed class AppController : IDisposable
         _engine.BreakEnded += Engine_OnBreakEnded;
         _sessionMonitor.SessionLocked += SessionMonitor_OnSessionLocked;
         _sessionMonitor.SessionUnlocked += SessionMonitor_OnSessionUnlocked;
+        _trayService.OpenRequested += TrayService_OnOpenRequested;
+        _trayService.SkipRequested += TrayService_OnSkipRequested;
+        _trayService.ExitRequested += TrayService_OnExitRequested;
+        _breakOverlayPresenter.SkipRequested += BreakOverlayPresenter_OnSkipRequested;
         _engine.Initialize();
+        _trayService.Show();
         _timer.Start();
     }
 
-    public void AttachMainWindow(MainWindow mainWindow)
+    public void AttachMainShell(IMainShell mainShell)
     {
-        _mainWindow = mainWindow;
-        _mainWindow.UpdateSettings(_engine.CurrentSettings);
-        _mainWindow.UpdateStatus(_engine.CurrentStatus);
+        _mainShell = mainShell;
+        _mainShell.UpdateSettings(_engine.CurrentSettings);
+        _mainShell.ApplyLocalization(_engine.CurrentSettings.LanguageCode, _engine.CurrentStatus);
+        _mainShell.UpdateStatus(_engine.CurrentStatus);
         RefreshHistory();
+        _trayService.Update(_engine.CurrentStatus);
+    }
+
+    public void ShowMainWindow()
+    {
+        if (_mainShell is null)
+        {
+            return;
+        }
+
+        _mainShell.RestoreAndActivateShell();
+    }
+
+    public void HideMainShell()
+    {
+        _mainShell?.HideShell();
     }
 
     public void SkipCurrentRest()
@@ -52,25 +85,27 @@ public sealed class AppController : IDisposable
         _engine.SkipCurrentRest();
     }
 
-    public bool SaveSettings(int workIntervalMinutes, int restDurationSeconds, out string errorMessage)
+    public bool SaveSettings(int workIntervalMinutes, int restDurationSeconds, string languageCode, out string errorMessage)
     {
         errorMessage = string.Empty;
 
         if (workIntervalMinutes is < 1 or > 240)
         {
-            errorMessage = "工作间隔请填写 1 到 240 分钟。";
+            errorMessage = AppText.Get(languageCode, "InvalidWorkInterval");
             return false;
         }
 
         if (restDurationSeconds is < 5 or > 3600)
         {
-            errorMessage = "休息时长请填写 5 到 3600 秒。";
+            errorMessage = AppText.Get(languageCode, "InvalidRestDuration");
             return false;
         }
 
-        _engine.UpdateSettings(new RhythmSettings(workIntervalMinutes, restDurationSeconds));
-        _mainWindow?.UpdateSettings(_engine.CurrentSettings);
+        _engine.UpdateSettings(new RhythmSettings(workIntervalMinutes, restDurationSeconds, languageCode));
+        _mainShell?.UpdateSettings(_engine.CurrentSettings);
+        _mainShell?.ApplyLocalization(_engine.CurrentSettings.LanguageCode, _engine.CurrentStatus);
         RefreshHistory();
+        _trayService.Update(_engine.CurrentStatus);
         return true;
     }
 
@@ -78,82 +113,97 @@ public sealed class AppController : IDisposable
     {
         IsExiting = true;
         _timer.Stop();
-        _restOverlayWindow?.Close();
-        _mainWindow?.Close();
-        Application.Current.Shutdown();
+        _breakOverlayPresenter.Close();
+        _trayService.Hide();
+        _mainShell?.CloseShell();
+        WpfApplication.Current.Shutdown();
     }
 
     public void Dispose()
     {
         _timer.Stop();
+        _trayService.Dispose();
+        _breakOverlayPresenter.Dispose();
         _sessionMonitor.Dispose();
     }
 
     private void Timer_OnTick(object? sender, EventArgs e)
     {
         _engine.Tick();
+        ApplyStatus(_engine.CurrentStatus);
     }
 
     private void Engine_OnStatusChanged(RhythmStatusSnapshot snapshot)
     {
-        if (Application.Current.Dispatcher.CheckAccess())
+        if (WpfApplication.Current.Dispatcher.CheckAccess())
         {
             ApplyStatus(snapshot);
             return;
         }
 
-        Application.Current.Dispatcher.Invoke(() => ApplyStatus(snapshot));
+        WpfApplication.Current.Dispatcher.Invoke(() => ApplyStatus(snapshot));
     }
 
     private void Engine_OnBreakStarted(object? sender, EventArgs e)
     {
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            _restOverlayWindow ??= new RestOverlayWindow(this);
-            _restOverlayWindow.UpdateCountdown(_engine.CurrentStatus.RestRemaining);
-            _restOverlayWindow.Show();
-            _restOverlayWindow.Activate();
-        });
+        _breakOverlayPresenter.Show(_engine.CurrentStatus);
     }
 
     private void Engine_OnBreakEnded(object? sender, RestSessionRecordedEventArgs e)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        WpfApplication.Current.Dispatcher.Invoke(() =>
         {
-            if (_restOverlayWindow is not null)
-            {
-                _restOverlayWindow.Close();
-                _restOverlayWindow = null;
-            }
-
+            _breakOverlayPresenter.Close();
             RefreshHistory();
         });
     }
 
     private void SessionMonitor_OnSessionLocked(object? sender, EventArgs e)
     {
-        Application.Current.Dispatcher.Invoke(_engine.HandleSessionLocked);
+        WpfApplication.Current.Dispatcher.Invoke(_engine.HandleSessionLocked);
     }
 
     private void SessionMonitor_OnSessionUnlocked(object? sender, EventArgs e)
     {
-        Application.Current.Dispatcher.Invoke(_engine.HandleSessionUnlocked);
+        WpfApplication.Current.Dispatcher.Invoke(_engine.HandleSessionUnlocked);
     }
 
     private void ApplyStatus(RhythmStatusSnapshot snapshot)
     {
-        _mainWindow?.UpdateStatus(snapshot);
-        _mainWindow?.UpdateSettings(snapshot.Settings);
+        _mainShell?.UpdateStatus(snapshot);
+        _mainShell?.UpdateSettings(snapshot.Settings);
+        _mainShell?.ApplyLocalization(snapshot.Settings.LanguageCode, snapshot);
 
-        if (_restOverlayWindow is not null && snapshot.State == RhythmState.Resting)
+        if (snapshot.State == RhythmState.Resting)
         {
-            _restOverlayWindow.UpdateCountdown(snapshot.RestRemaining);
+            _breakOverlayPresenter.Update(snapshot);
         }
+
+        _trayService.Update(snapshot);
     }
 
     private void RefreshHistory()
     {
-        _mainWindow?.UpdateHistory(_engine.GetRecentSessions(12), _engine.GetTodaySessions());
+        _mainShell?.UpdateHistory(_engine.GetRecentSessions(12), _engine.GetTodaySessions(), _engine.CurrentSettings.LanguageCode);
     }
 
+    private void TrayService_OnOpenRequested(object? sender, EventArgs e)
+    {
+        ShowMainWindow();
+    }
+
+    private void TrayService_OnSkipRequested(object? sender, EventArgs e)
+    {
+        SkipCurrentRest();
+    }
+
+    private void TrayService_OnExitRequested(object? sender, EventArgs e)
+    {
+        Exit();
+    }
+
+    private void BreakOverlayPresenter_OnSkipRequested(object? sender, EventArgs e)
+    {
+        SkipCurrentRest();
+    }
 }

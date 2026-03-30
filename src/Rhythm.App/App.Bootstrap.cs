@@ -21,16 +21,19 @@ public partial class App
         var database = new RhythmDatabase(Path.Combine(dataDirectory, "rhythm.db"));
         var engine = new RhythmEngine(database, database);
         var sessionMonitor = new WindowsSessionMonitor();
+        var trayService = new WindowsTrayService();
+        var breakOverlayPresenter = new WindowsBreakOverlayPresenter();
 
-        Controller = new AppController(engine, sessionMonitor);
+        Controller = new AppController(engine, sessionMonitor, trayService, breakOverlayPresenter);
         Controller.Initialize();
 
         base.OnStartup(e);
 
-        if (MainWindow is MainWindow mainWindow)
-        {
-            Controller.AttachMainWindow(mainWindow);
-        }
+        var mainWindow = new MainWindow(Controller);
+        mainWindow.InitializeShell();
+        MainWindow = mainWindow;
+        Controller.AttachMainShell(mainWindow);
+        mainWindow.ShowShell();
     }
 
     protected override void OnExit(ExitEventArgs e)

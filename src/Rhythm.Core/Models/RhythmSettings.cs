@@ -1,8 +1,8 @@
 namespace Rhythm.Core.Models;
 
-public sealed record RhythmSettings(int WorkIntervalMinutes, int RestDurationSeconds)
+public sealed record RhythmSettings(int WorkIntervalMinutes, int RestDurationSeconds, string LanguageCode = "zh-CN")
 {
-    public static RhythmSettings Default { get; } = new(50, 600);
+    public static RhythmSettings Default { get; } = new(50, 600, "zh-CN");
 
     public TimeSpan WorkInterval => TimeSpan.FromMinutes(WorkIntervalMinutes);
 
@@ -12,6 +12,16 @@ public sealed record RhythmSettings(int WorkIntervalMinutes, int RestDurationSec
     {
         return new RhythmSettings(
             Math.Clamp(WorkIntervalMinutes, 1, 240),
-            Math.Clamp(RestDurationSeconds, 5, 3600));
+            Math.Clamp(RestDurationSeconds, 5, 3600),
+            NormalizeLanguage(LanguageCode));
+    }
+
+    private static string NormalizeLanguage(string? languageCode)
+    {
+        return languageCode switch
+        {
+            "en-US" => "en-US",
+            _ => "zh-CN"
+        };
     }
 }

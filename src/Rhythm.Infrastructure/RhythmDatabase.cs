@@ -14,7 +14,7 @@ public sealed class RhythmDatabase : IRhythmSettingsStore, IRestSessionRepositor
     {
         _databasePath = databasePath;
         Directory.CreateDirectory(Path.GetDirectoryName(_databasePath)!);
-        _connectionString = $"Data Source={_databasePath}";
+        _connectionString = $"Data Source={_databasePath};Pooling=False";
         Initialize();
     }
 
@@ -23,7 +23,7 @@ public sealed class RhythmDatabase : IRhythmSettingsStore, IRestSessionRepositor
         using var connection = OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT work_interval_minutes, rest_duration_seconds
+            SELECT work_interval_minutes, rest_duration_seconds, language_code
             FROM settings
             WHERE id = 1;
             """;
@@ -34,7 +34,7 @@ public sealed class RhythmDatabase : IRhythmSettingsStore, IRestSessionRepositor
             return RhythmSettings.Default;
         }
 
-        return new RhythmSettings(reader.GetInt32(0), reader.GetInt32(1)).Normalize();
+        return new RhythmSettings(reader.GetInt32(0), reader.GetInt32(1), reader.GetString(2)).Normalize();
     }
 
     public void SaveSettings(RhythmSettings settings)
@@ -42,15 +42,17 @@ public sealed class RhythmDatabase : IRhythmSettingsStore, IRestSessionRepositor
         using var connection = OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO settings (id, work_interval_minutes, rest_duration_seconds, updated_at)
-            VALUES (1, $workIntervalMinutes, $restDurationSeconds, $updatedAt)
+            INSERT INTO settings (id, work_interval_minutes, rest_duration_seconds, language_code, updated_at)
+            VALUES (1, $workIntervalMinutes, $restDurationSeconds, $languageCode, $updatedAt)
             ON CONFLICT(id) DO UPDATE SET
                 work_interval_minutes = excluded.work_interval_minutes,
                 rest_duration_seconds = excluded.rest_duration_seconds,
+                language_code = excluded.language_code,
                 updated_at = excluded.updated_at;
             """;
         command.Parameters.AddWithValue("$workIntervalMinutes", settings.WorkIntervalMinutes);
         command.Parameters.AddWithValue("$restDurationSeconds", settings.RestDurationSeconds);
+        command.Parameters.AddWithValue("$languageCode", settings.LanguageCode);
         command.Parameters.AddWithValue("$updatedAt", DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture));
         command.ExecuteNonQuery();
     }
@@ -127,6 +129,7 @@ public sealed class RhythmDatabase : IRhythmSettingsStore, IRestSessionRepositor
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 work_interval_minutes INTEGER NOT NULL,
                 rest_duration_seconds INTEGER NOT NULL,
+                language_code TEXT NOT NULL DEFAULT 'zh-CN',
                 updated_at TEXT NOT NULL
             );
 
@@ -143,6 +146,7 @@ public sealed class RhythmDatabase : IRhythmSettingsStore, IRestSessionRepositor
             );
             """;
         command.ExecuteNonQuery();
+        EnsureSettingsLanguageColumn(connection);
     }
 
     private SqliteConnection OpenConnection()
@@ -150,6 +154,32 @@ public sealed class RhythmDatabase : IRhythmSettingsStore, IRestSessionRepositor
         var connection = new SqliteConnection(_connectionString);
         connection.Open();
         return connection;
+    }
+
+    private static void EnsureSettingsLanguageColumn(SqliteConnection connection)
+    {
+        using var checkCommand = connection.CreateCommand();
+        checkCommand.CommandText = "PRAGMA table_info(settings);";
+        using var reader = checkCommand.ExecuteReader();
+
+        var hasLanguageColumn = false;
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), "language_code", StringComparison.OrdinalIgnoreCase))
+            {
+                hasLanguageColumn = true;
+                break;
+            }
+        }
+
+        if (hasLanguageColumn)
+        {
+            return;
+        }
+
+        using var alterCommand = connection.CreateCommand();
+        alterCommand.CommandText = "ALTER TABLE settings ADD COLUMN language_code TEXT NOT NULL DEFAULT 'zh-CN';";
+        alterCommand.ExecuteNonQuery();
     }
 
     private static IReadOnlyList<RestSessionRecord> ReadSessions(SqliteCommand command)

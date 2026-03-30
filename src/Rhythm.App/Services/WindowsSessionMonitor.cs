@@ -1,8 +1,9 @@
 using Microsoft.Win32;
+using Rhythm.Core.Abstractions;
 
 namespace Rhythm.App.Services;
 
-public sealed class WindowsSessionMonitor : IDisposable
+public sealed class WindowsSessionMonitor : ISessionMonitor
 {
     public WindowsSessionMonitor()
     {

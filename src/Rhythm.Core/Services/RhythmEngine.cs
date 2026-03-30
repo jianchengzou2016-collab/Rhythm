@@ -8,6 +8,7 @@ public sealed class RhythmEngine
 {
     private readonly IRhythmSettingsStore _settingsStore;
     private readonly IRestSessionRepository _sessionRepository;
+    private readonly IClock _clock;
 
     private RhythmSettings _settings = RhythmSettings.Default;
     private RhythmState _state = RhythmState.Working;
@@ -15,10 +16,11 @@ public sealed class RhythmEngine
     private RestSessionRecord? _activeSession;
     private bool _isLocked;
 
-    public RhythmEngine(IRhythmSettingsStore settingsStore, IRestSessionRepository sessionRepository)
+    public RhythmEngine(IRhythmSettingsStore settingsStore, IRestSessionRepository sessionRepository, IClock? clock = null)
     {
         _settingsStore = settingsStore;
         _sessionRepository = sessionRepository;
+        _clock = clock ?? new SystemClock();
     }
 
     public event Action<RhythmStatusSnapshot>? StatusChanged;
@@ -29,13 +31,13 @@ public sealed class RhythmEngine
 
     public RhythmSettings CurrentSettings => _settings;
 
-    public RhythmStatusSnapshot CurrentStatus => BuildSnapshot(DateTimeOffset.Now);
+    public RhythmStatusSnapshot CurrentStatus => BuildSnapshot(_clock.Now);
 
     public void Initialize()
     {
         _settings = _settingsStore.LoadSettings().Normalize();
-        _workCycleStartedAt = DateTimeOffset.Now;
-        PublishStatus(DateTimeOffset.Now);
+        _workCycleStartedAt = _clock.Now;
+        PublishStatus(_clock.Now);
     }
 
     public void UpdateSettings(RhythmSettings settings)
@@ -45,15 +47,15 @@ public sealed class RhythmEngine
 
         if (_state == RhythmState.Working && !_isLocked)
         {
-            _workCycleStartedAt = DateTimeOffset.Now;
+            _workCycleStartedAt = _clock.Now;
         }
 
-        PublishStatus(DateTimeOffset.Now);
+        PublishStatus(_clock.Now);
     }
 
     public void Tick()
     {
-        var now = DateTimeOffset.Now;
+        var now = _clock.Now;
 
         if (_isLocked)
         {
@@ -85,12 +87,12 @@ public sealed class RhythmEngine
             return;
         }
 
-        FinishRest(RestSessionResult.Skipped, "esc", DateTimeOffset.Now);
+        FinishRest(RestSessionResult.Skipped, "esc", _clock.Now);
     }
 
     public void HandleSessionLocked()
     {
-        var now = DateTimeOffset.Now;
+        var now = _clock.Now;
 
         if (_state == RhythmState.Resting && _activeSession is not null)
         {
@@ -107,8 +109,8 @@ public sealed class RhythmEngine
     {
         _isLocked = false;
         _state = RhythmState.Working;
-        _workCycleStartedAt = DateTimeOffset.Now;
-        PublishStatus(DateTimeOffset.Now);
+        _workCycleStartedAt = _clock.Now;
+        PublishStatus(_clock.Now);
     }
 
     public IReadOnlyList<RestSessionRecord> GetRecentSessions(int limit)
@@ -118,7 +120,7 @@ public sealed class RhythmEngine
 
     public IReadOnlyList<RestSessionRecord> GetTodaySessions()
     {
-        var localNow = DateTimeOffset.Now;
+        var localNow = _clock.Now;
         var startOfDay = new DateTimeOffset(localNow.Year, localNow.Month, localNow.Day, 0, 0, 0, localNow.Offset);
         return _sessionRepository.GetSessionsSince(startOfDay);
     }
