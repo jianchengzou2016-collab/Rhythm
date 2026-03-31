@@ -140,7 +140,7 @@ public partial class MainWindow : IMainShell
             _restDurationTextBox.Text = settings.RestDurationSeconds.ToString();
         }
 
-        if (_languageComboBox is not null)
+        if (_languageComboBox is not null && !_languageComboBox.IsKeyboardFocusWithin && !_languageComboBox.IsDropDownOpen)
         {
             _languageComboBox.SelectedValue = settings.LanguageCode;
         }

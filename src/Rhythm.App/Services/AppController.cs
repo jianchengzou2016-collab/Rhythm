@@ -171,8 +171,6 @@ public sealed class AppController : IDisposable
     private void ApplyStatus(RhythmStatusSnapshot snapshot)
     {
         _mainShell?.UpdateStatus(snapshot);
-        _mainShell?.UpdateSettings(snapshot.Settings);
-        _mainShell?.ApplyLocalization(snapshot.Settings.LanguageCode, snapshot);
 
         if (snapshot.State == RhythmState.Resting)
         {
