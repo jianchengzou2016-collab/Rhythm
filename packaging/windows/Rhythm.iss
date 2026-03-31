@@ -1,6 +1,6 @@
 #define MyAppName "Rhythm"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "0.0.0-local"
 #endif
 #ifndef MyAppPublisher
   #define MyAppPublisher "Rhythm Open Source"

@@ -1,24 +1,84 @@
 param(
     [string]$Configuration = "Release",
     [string]$RuntimeIdentifier = "win-x64",
-    [string]$Version = "1.0.0"
+    [string]$Version = "",
+    [string]$InnoCompilerPath = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Add-DirectoryToPathIfPresent {
+    param([string]$PathToAdd)
+
+    if (-not [string]::IsNullOrWhiteSpace($PathToAdd) -and (Test-Path $PathToAdd)) {
+        $pathEntries = $env:PATH -split ';'
+        if ($pathEntries -notcontains $PathToAdd) {
+            $env:PATH = "$PathToAdd;$env:PATH"
+        }
+    }
+}
+
+function Resolve-InnoCompilerPath {
+    param([string]$ConfiguredPath)
+
+    if (-not [string]::IsNullOrWhiteSpace($ConfiguredPath)) {
+        if (-not (Test-Path $ConfiguredPath)) {
+            throw "Inno Setup compiler was not found at '$ConfiguredPath'."
+        }
+
+        return $ConfiguredPath
+    }
+
+    $commonPaths = @(
+        "D:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    )
+
+    foreach ($candidate in $commonPaths) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    $command = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    throw "Unable to find ISCC.exe. Install Inno Setup 6 or pass -InnoCompilerPath explicitly."
+}
+
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $publishDirectory = Join-Path $root "artifacts\publish\$RuntimeIdentifier"
 $outputDirectory = Join-Path $root "artifacts\installer"
 $issPath = Join-Path $PSScriptRoot "Rhythm.iss"
-$innoCompilerPath = "D:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-$setupPath = Join-Path $outputDirectory "Rhythm-Setup-$Version-$RuntimeIdentifier.exe"
+
+Add-DirectoryToPathIfPresent "D:\Program Files\Git\cmd"
+Add-DirectoryToPathIfPresent "C:\Program Files\Git\cmd"
+$innoCompilerPath = Resolve-InnoCompilerPath -ConfiguredPath $InnoCompilerPath
 
 New-Item -ItemType Directory -Force -Path $publishDirectory | Out-Null
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 
 Push-Location $root
 try {
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        $Version = dotnet msbuild .\src\Rhythm.App\Rhythm.App.csproj -nologo -getProperty:Version
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to resolve application version from MSBuild."
+        }
+
+        $Version = $Version.Trim()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        throw "Resolved version was empty."
+    }
+
+    $setupVersion = ($Version -split '\+', 2)[0]
+    $setupPath = Join-Path $outputDirectory "Rhythm-Setup-$setupVersion-$RuntimeIdentifier.exe"
+
     dotnet publish .\src\Rhythm.App\Rhythm.App.csproj `
         -c $Configuration `
         -r $RuntimeIdentifier `
@@ -35,7 +95,7 @@ if (Test-Path $setupPath) {
 }
 
 & $innoCompilerPath `
-    "/DMyAppVersion=$Version" `
+    "/DMyAppVersion=$setupVersion" `
     "/DMyAppSourceDir=$publishDirectory" `
     "/DMyAppOutputDir=$outputDirectory" `
     $issPath

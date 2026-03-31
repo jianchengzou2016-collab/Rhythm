@@ -1,0 +1,41 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Restore
+        run: dotnet restore Rhythm.sln
+
+      - name: Build
+        run: dotnet build Rhythm.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test Rhythm.sln --configuration Release --no-build
+
+      - name: Build installer
+        shell: pwsh
+        run: ./packaging/windows/Build-RhythmInstaller.ps1 -Configuration Release -RuntimeIdentifier win-x64
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rhythm-installer-${{ github.ref_name }}
+          path: artifacts/installer/*.exe

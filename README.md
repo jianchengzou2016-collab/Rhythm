@@ -61,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\Generate-RhythmIcon.ps1
 - 构建 Windows 10+ `Inno Setup` 轻量安装包：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\packaging\windows\Build-RhythmInstaller.ps1 -Configuration Release -RuntimeIdentifier win-x64 -Version 1.0.0
+powershell -ExecutionPolicy Bypass -File .\packaging\windows\Build-RhythmInstaller.ps1 -Configuration Release -RuntimeIdentifier win-x64
 ```
 
 - 安装脚本在 `packaging/windows/Rhythm.iss`
@@ -74,6 +74,17 @@ powershell -ExecutionPolicy Bypass -File .\packaging\windows\Build-RhythmInstall
 
 ```text
 artifacts/installer/
+```
+
+## 版本发布
+
+- 版本号由 Git tag 自动决定，当前约定使用 `v` 前缀，例如 `v1.0.1`
+- 平时分支上的构建会基于最近的发布 tag 自动推导下一个补丁版本
+- 正式发布时，只需要在要发布的提交上打 tag，再运行安装包构建脚本，或直接 push tag 触发 GitHub Actions 的 release 工作流
+
+```powershell
+& 'D:\Program Files\Git\cmd\git.exe' tag v1.0.1
+& 'D:\Program Files\Git\cmd\git.exe' push origin v1.0.1
 ```
 
 ## 数据存储
