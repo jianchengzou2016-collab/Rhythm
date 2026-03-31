@@ -4,7 +4,7 @@ public static class AppText
 {
     public static string Get(string languageCode, string key)
     {
-        var strings = languageCode == "en-US" ? English : Chinese;
+        var strings = languageCode == "en-AU" ? English : Chinese;
         return strings.TryGetValue(key, out var value) ? value : key;
     }
 
@@ -16,7 +16,7 @@ public static class AppText
     public static IReadOnlyList<LanguageOption> SupportedLanguages { get; } =
     [
         new("zh-CN", "简体中文"),
-        new("en-US", "English")
+        new("en-AU", "English")
     ];
 
     private static readonly Dictionary<string, string> Chinese = new()

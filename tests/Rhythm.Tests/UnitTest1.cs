@@ -96,7 +96,7 @@ public sealed class UnitTest1
         try
         {
             var database = new RhythmDatabase(Path.Combine(tempDirectory, "rhythm.db"));
-            var settings = new RhythmSettings(45, 120, "en-US");
+            var settings = new RhythmSettings(45, 120, "en-AU");
             database.SaveSettings(settings);
 
             database.SaveSession(new RestSessionRecord
@@ -115,7 +115,7 @@ public sealed class UnitTest1
 
             Assert.Equal(45, loadedSettings.WorkIntervalMinutes);
             Assert.Equal(120, loadedSettings.RestDurationSeconds);
-            Assert.Equal("en-US", loadedSettings.LanguageCode);
+            Assert.Equal("en-AU", loadedSettings.LanguageCode);
             Assert.Single(sessions);
             Assert.Equal(90, sessions[0].ActualRestSeconds);
         }
@@ -140,7 +140,7 @@ public sealed class UnitTest1
     public void MobileShellCoordinator_BuildDashboardState_ReturnsTodaySummary()
     {
         var clock = new FakeClock(new DateTimeOffset(2026, 3, 30, 9, 0, 0, TimeSpan.Zero));
-        var repository = new InMemoryRepository(new RhythmSettings(1, 30, "en-US"));
+        var repository = new InMemoryRepository(new RhythmSettings(1, 30, "en-AU"));
         var engine = new RhythmEngine(repository, repository, clock);
         var coordinator = new MobileShellCoordinator(engine);
 

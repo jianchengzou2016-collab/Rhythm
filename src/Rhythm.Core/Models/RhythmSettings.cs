@@ -20,7 +20,7 @@ public sealed record RhythmSettings(int WorkIntervalMinutes, int RestDurationSec
     {
         return languageCode switch
         {
-            "en-US" => "en-US",
+            "en-AU" => "en-AU",
             _ => "zh-CN"
         };
     }
