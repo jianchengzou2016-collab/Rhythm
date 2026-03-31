@@ -64,13 +64,13 @@ New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 Push-Location $root
 try {
     if ([string]::IsNullOrWhiteSpace($Version)) {
-        $Version = dotnet msbuild .\src\Rhythm.App\Rhythm.App.csproj -nologo -getProperty:Version
+        $versionInfo = dotnet msbuild .\src\Rhythm.App\Rhythm.App.csproj -nologo -t:MinVer -getProperty:MinVerVersion -getProperty:Version | ConvertFrom-Json
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to resolve application version from MSBuild."
+        throw "Failed to resolve application version from MSBuild."
         }
-
-        $Version = $Version.Trim()
+        $Version = $versionInfo.Properties.Version.Trim()
     }
+
 
     if ([string]::IsNullOrWhiteSpace($Version)) {
         throw "Resolved version was empty."
