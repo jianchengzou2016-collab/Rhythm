@@ -130,7 +130,6 @@ public sealed class AppController : IDisposable
     private void Timer_OnTick(object? sender, EventArgs e)
     {
         _engine.Tick();
-        ApplyStatus(_engine.CurrentStatus);
     }
 
     private void Engine_OnStatusChanged(RhythmStatusSnapshot snapshot)

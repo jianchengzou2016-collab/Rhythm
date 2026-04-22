@@ -32,6 +32,7 @@ public sealed class RestOverlayWindow : Window
         FontFamily = new WpfFontFamily("Bahnschrift");
         PreviewKeyDown += Window_OnPreviewKeyDown;
         Loaded += Window_OnLoaded;
+        Closed += Window_OnClosed;
 
         Left = screen.Bounds.Left;
         Top = screen.Bounds.Top;
@@ -124,6 +125,14 @@ public sealed class RestOverlayWindow : Window
     {
         Focus();
         Keyboard.Focus(this);
+    }
+
+    private void Window_OnClosed(object? sender, EventArgs e)
+    {
+        PreviewKeyDown -= Window_OnPreviewKeyDown;
+        Loaded -= Window_OnLoaded;
+        Closed -= Window_OnClosed;
+        Content = null;
     }
 
     private static string FormatDuration(TimeSpan duration)
